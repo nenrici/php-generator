@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Model;
 
-use Roave\BetterReflection\Reflection\ReflectionType;
+use PHPStan\BetterReflection\Reflection\ReflectionNamedType;
+use ReflectionType;
 use Sidux\PhpGenerator\Helper;
 use Sidux\PhpGenerator\Helper\PhpHelper;
 use Sidux\PhpGenerator\Model\Contract\Element;
@@ -82,6 +83,9 @@ class Type implements Element, NamespaceAware
         if (\in_array($type, self::INTERNAL_TYPES, true)) {
             $this->internal = true;
         }
+        if (preg_match('/<.*>/', $type)) {
+            $type = preg_replace('/<.*>/', '', $type);
+        }
         $this->setQualifiedName($type);
     }
 
@@ -100,11 +104,17 @@ class Type implements Element, NamespaceAware
         return new self(...$args);
     }
 
-    public static function fromReflectionType(ReflectionType $ref): self
+    public static function fromReflectionType(ReflectionType|ReflectionNamedType $ref): self
     {
         $name = (string)$ref;
         if (!$ref->isBuiltin() && !str_contains($name, '\\')) {
-            $name = '\\' . $name;
+            $prefix = '';
+
+            if (str_contains($name, '?')) {
+                $prefix = '?';
+                $name = str_replace($prefix, '', $name);
+            }
+            $name = $prefix . '\\' . $name;
         }
         $type           = self::create($name);
         $type->internal = $ref->isBuiltin();

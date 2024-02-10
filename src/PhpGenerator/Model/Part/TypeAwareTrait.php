@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Sidux\PhpGenerator\Model\Part;
 
 use phpDocumentor\Reflection\Type as DocType;
-use Roave\BetterReflection\Reflection\ReflectionType;
+use PHPStan\BetterReflection\Reflection\ReflectionNamedType;
+use ReflectionType;
 use Sidux\PhpGenerator\Model\Contract\NamespaceAware;
 use Sidux\PhpGenerator\Model\Contract\TypeAware;
 use Sidux\PhpGenerator\Model\Type;
@@ -40,7 +41,12 @@ trait TypeAwareTrait
     public function getTypeHint(): ?string
     {
         $types  = $this->getTypes();
-        if (\count($types) > 2) {
+
+        $types = array_map(function (Type $type) {
+            return $type->isCollection() ? $type . '[]' : $type;
+        }, $types);
+
+        if (!isset($types[Type::NULL]) && \count($types) == 2 || \count($types) > 2) {
             return implode('|', $types);
         }
 
@@ -124,7 +130,7 @@ trait TypeAwareTrait
         return $this;
     }
 
-    public function addTypeFromReflectionType(ReflectionType $ref): self
+    public function addTypeFromReflectionType(ReflectionType|ReflectionNamedType $ref): self
     {
         $type = Type::fromReflectionType($ref);
 
@@ -176,7 +182,7 @@ trait TypeAwareTrait
             return $this->addTypeFromString($type);
         }
 
-        if ($type instanceof ReflectionType) {
+        if ($type instanceof ReflectionType || $type instanceof \PHPStan\BetterReflection\Reflection\ReflectionType) {
             return $this->addTypeFromReflectionType($type);
         }
 

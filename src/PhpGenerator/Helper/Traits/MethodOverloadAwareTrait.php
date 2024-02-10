@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Helper\Traits;
 
-use Roave\BetterReflection\Reflection\ReflectionClass;
 use Sidux\PhpGenerator\Helper\PhpHelper;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 
 trait MethodOverloadAwareTrait
 {
@@ -29,12 +29,12 @@ trait MethodOverloadAwareTrait
         foreach ($args as $i => $arg) {
             $type = \gettype($arg);
             if ('object' === $type) {
-                $class       = ReflectionClass::createFromInstance($arg);
+                $class       = ReflectionHelper::createClassFromInstance($arg);
                 $types[$i][] = $class->getShortName();
                 $types[$i]   = array_merge(
                     $types[$i],
                     $class->getInterfaceNames(),
-                    $class->getParentClassNames()
+                    [$class->getParentClass() ?? $class->getParentClass()->getName()]
                 );
             }
             $types[$i][] = $type;

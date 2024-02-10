@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Model;
 
-use Roave\BetterReflection\Reflection\ReflectionProperty;
+use ReflectionProperty;
 use Sidux\PhpGenerator\Helper;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Model\Contract\Element;
 use Sidux\PhpGenerator\Model\Contract\Member;
 use Sidux\PhpGenerator\Model\Contract\TypeAware;
@@ -48,7 +49,7 @@ final class Property extends Member implements ValueAware, Element, TypeAware
 
     public static function fromArray(array $from): self
     {
-        $ref = ReflectionProperty::createFromInstance($from[0], $from[1]);
+        $ref = ReflectionHelper::createPropertyFromInstance($from[0], $from[1]);
 
         return self::fromReflectionProperty($ref);
     }
@@ -74,15 +75,22 @@ final class Property extends Member implements ValueAware, Element, TypeAware
     public static function fromReflectionProperty(ReflectionProperty $ref): self
     {
         $prop = new self($ref->getName());
-        if ($ref->getAst()->props[0]->default) {
+        /* Why is prop1 checked?
+         * if ($ref->getDeclaringClass()->getProperties()['prop1']->getDefaultValue()) {
             $prop->setValue($ref->getDefaultValue());
-        }
+        }*/
         $prop->addType($ref->getType());
         $prop->setStatic($ref->isStatic());
-        foreach ($ref->getDocBlockTypes() as $type) {
+        foreach (Helper\ReflectionHelper::getDocBlockTypes($ref) as $type) {
             $prop->addType((string)$type);
         }
-        $prop->setComment($ref->getDocComment());
+        $prop->setComment($ref->getDocComment() ?: null);
+
+        $classInstance = $ref->getDeclaringClass()->newInstance();
+
+        if ($ref->hasType() && $ref->isInitialized($classInstance)) {
+            $prop->setValue($ref->getDefaultValue());
+        }
 
         if ($ref->isPrivate()) {
             $prop->setVisibility(Struct::PRIVATE);
@@ -98,7 +106,7 @@ final class Property extends Member implements ValueAware, Element, TypeAware
     public static function fromString(string $from): self
     {
         [$className, $propertyName] = explode('::', $from);
-        $ref = ReflectionProperty::createFromName($className, $propertyName);
+        $ref = ReflectionHelper::createPropertyFromName($className, $propertyName);
 
         return self::fromReflectionProperty($ref);
     }

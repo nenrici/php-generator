@@ -75,7 +75,7 @@ namespace Sidux\PhpGenerator\Stub;
  */
 class Class5
 {
-    public function func1(A $a, ?B $b, ?\C $c = null, ?\D $d = null, \E $e, ?int $i = 1, ?array $arr = [])
+    public function func1(A $a, ?B $b, \E $e, ?\C $c = null, ?\D $d = null, ?int $i = 1, ?array $arr = [])
     {
     }
 

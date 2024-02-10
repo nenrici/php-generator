@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Model;
 
-use Roave\BetterReflection\BetterReflection;
-use Roave\BetterReflection\Reflection\ReflectionClass;
-use Roave\BetterReflection\Reflection\ReflectionObject;
-use Roave\BetterReflection\Reflector\ClassReflector;
-use Roave\BetterReflection\SourceLocator\Type\SingleFileSourceLocator;
+use PHPStan\BetterReflection\BetterReflection;
+use PHPStan\BetterReflection\Reflector\ClassReflector;
+use PHPStan\BetterReflection\SourceLocator\Type\SingleFileSourceLocator;
+use ReflectionClass;
+use ReflectionObject;
 use Sidux\PhpGenerator\Helper;
 use Sidux\PhpGenerator\Helper\PhpHelper;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Helper\StringHelper;
 use Sidux\PhpGenerator\Model\Contract\Element;
 use Sidux\PhpGenerator\Model\Contract\Member;
@@ -195,19 +196,19 @@ final class Struct implements NamespaceAware, Element
 
     public static function fromObject(object $object): self
     {
-        $from = ReflectionClass::createFromInstance($object);
+        $from = ReflectionHelper::createClassFromInstance($object);
 
         return self::fromReflectionClass($from);
     }
 
-    public static function fromReflectionClass(ReflectionClass $from): self
+    public static function fromReflectionClass(ReflectionClass|\PHPStan\BetterReflection\Reflection\ReflectionClass $from): self
     {
         if ($from->isAnonymous()) {
             throw new \InvalidArgumentException('Anonymous classes are not supported.');
         }
         $class = new self($from->getName());
 
-        $class->setComment($from->getDocComment());
+        $class->setComment($from->getDocComment() ?: null);
 
         if ($from->isTrait()) {
             $class->setType(self::_TRAIT);
@@ -219,38 +220,42 @@ final class Struct implements NamespaceAware, Element
         $class->setFinal($from->isFinal() && $class->getType() === $class::_CLASS);
         $class->setAbstract($from->isAbstract() && $class->getType() === $class::_CLASS);
 
-        $interfaces = [];
-        //bug fix getImmediateInterfaces should not return parent interfaces
-        foreach ($from->getImmediateInterfaces() as $interface) {
-            foreach ($interfaces as $implement) {
-                if ($implement->implementsInterface($interface->getName())) {
-                    continue 2;
+        $alreadyImplemented = [];
+        $implements = $from->getInterfaces();
+        $extend = $from->getParentClass();
+        $parents = array_merge($implements, $extend ? [$extend] : []);
+
+        foreach ($parents as $parent) {
+            if ($parent->getInterfaces() !== []) {
+                foreach ($parent->getInterfaces() as $interface) {
+                    $alreadyImplemented[$interface->getName()] = $interface;
                 }
             }
-            $interfaces[$interface->getName()] = $interface;
         }
 
+        $interfaces = array_diff_key($implements, $alreadyImplemented);
         $class->setImplements(array_keys($interfaces));
 
-        $parent = $from->getParentClass();
-        if ($parent) {
-            $class->setExtends([$parent->getName()]);
+        if ($extend) {
+            $class->setExtends([$extend->getName()]);
         }
 
         $props = [];
-        foreach ($from->getImmediateProperties() as $prop) {
-            if ($prop->isDefault()) {
+        foreach ($from->getProperties() as $prop) {
+            if ($prop->isDefault() && $from->getName() === $prop->getDeclaringClass()->getName()) {
                 $props[] = Property::from($prop);
             }
         }
         $class->setProperties($props);
 
         $methods = [];
-        foreach ($from->getImmediateMethods() as $method) {
-            $methods[] = Method::from($method);
+        foreach ($from->getMethods() as $method) {
+            if ($from->getName() === $method->getDeclaringClass()->getName()) {
+                $methods[] = Method::from($method);
+            }
         }
         $class->setMethods($methods);
-        $class->setConstants($from->getImmediateConstants());
+        $class->setConstants($from->getConstants());
 
         return $class;
     }
@@ -262,7 +267,7 @@ final class Struct implements NamespaceAware, Element
 
     public static function fromString(string $className): self
     {
-        $from = ReflectionClass::createFromName($className);
+        $from = ReflectionHelper::createClassFromName($className);
 
         return self::fromReflectionClass($from);
     }

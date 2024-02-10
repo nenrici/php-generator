@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Sidux\PhpGenerator\Model;
 
 use PHPUnit\Framework\TestCase;
-use Roave\BetterReflection\Reflection\ReflectionClass;
-use Roave\BetterReflection\Reflection\ReflectionObject;
 use Sidux\PhpGenerator\Assert;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Helper\StubHelper;
 use Sidux\PhpGenerator\Stub\B;
 use Sidux\PhpGenerator\Stub\Class1;
@@ -29,7 +28,7 @@ final class StructTest extends TestCase
      */
     public function from(): void
     {
-        $res = Struct::from(ReflectionClass::createFromName(\stdClass::class));
+        $res = Struct::from(ReflectionHelper::createClassFromName(\stdClass::class));
         Assert::assertInstanceOf(Struct::class, $res);
         Assert::assertSame('stdClass', $res->getName());
 
@@ -37,7 +36,7 @@ final class StructTest extends TestCase
         Assert::assertException(
             static function () {
                 Struct::from(
-                    ReflectionObject::createFromInstance(
+                    ReflectionHelper::createClassFromInstance(
                         new class {
                         }
                     )
@@ -57,7 +56,7 @@ final class StructTest extends TestCase
          * @phpstan-ignore-next-line
          */
         $obj->prop2 = 1;
-        $res[]      = Struct::from(ReflectionObject::createFromInstance($obj));
+        $res[]      = Struct::from(ReflectionHelper::createClassFromInstance($obj));
         $res[]      = Struct::from(Class4::class);
         $res[]      = Struct::from(Class5::class);
         $res[]      = Struct::from(Class6::class);
@@ -465,25 +464,32 @@ final class StructTest extends TestCase
         $objectClass = new Struct('PhpGenerator\Stub\SubNamespace\PropertyTwo');
         $constructor = $class->addConstructor();
 
-        $constructor->setParameters([
-            Parameter::create('propertyOne')
-                ->addType('string')
-                ->setVisibility(Struct::PUBLIC)
-                ->setPromoted(),
-            Parameter::create('propertyTwo')
-                ->addType($objectClass)
-                ->setVisibility(Struct::PUBLIC)
-                ->setPromoted(),
-            Parameter::create('propertyThree')
-                ->addTypes(['string', 'array', 'null'])
-                ->setVisibility(Struct::PUBLIC)
-                ->setPromoted(),
-            Parameter::create('propertyFour')
-                ->addTypes(['string', 'null'])
-                ->setValue(null)
-                ->setVisibility(Struct::PUBLIC)
-                ->setPromoted(),
-        ]);
+        $constructor
+            ->addParameter('propertyOne')
+            ->addType('string')
+            ->setVisibility(Struct::PUBLIC)
+            ->setPromoted();
+
+        $constructor
+            ->addParameter('propertyTwo')
+            ->addType($objectClass)
+            ->setVisibility(Struct::PUBLIC)
+            ->setPromoted();
+
+        $constructor
+            ->addParameter('propertyThree')
+            ->addTypes(['string', 'array', 'null'])
+            ->setVisibility(Struct::PUBLIC)
+            ->setPromoted();
+
+        $constructor
+            ->addParameter('propertyFour')
+            ->addTypes(['string', 'null'])
+            ->setVisibility(Struct::PUBLIC)
+            ->setPromoted()
+            ->setValue(null);
+
+        $constructor->setFormat();
 
         Assert::assertExpect('ClassType.from.82.expect', $class);
     }

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Model;
 
-use Roave\BetterReflection\Reflection\ReflectionParameter;
+use ReflectionParameter;
 use Sidux\PhpGenerator\Helper;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Model\Contract\Element;
 use Sidux\PhpGenerator\Model\Contract\TypeAware;
 use Sidux\PhpGenerator\Model\Contract\ValueAware;
@@ -40,9 +41,11 @@ class Parameter implements ValueAware, Element, TypeAware
         return $this->parent;
     }
 
-    public function setParent(?Method $parent): void
+    public function setParent(?Method $parent): self
     {
         $this->parent = $parent;
+
+        return $this;
     }
 
     public static function create(string $name): self
@@ -67,17 +70,17 @@ class Parameter implements ValueAware, Element, TypeAware
     public static function fromArray(array $from): self
     {
         [$classInstance, $methodName, $parameterName] = $from;
-        $ref = ReflectionParameter::createFromClassInstanceAndMethod($classInstance, $methodName, $parameterName);
+        $ref = ReflectionHelper::createParameterFromInstanceAndMethod($classInstance, $methodName, $parameterName);
 
         return self::fromReflectionParameter($ref);
     }
 
-    public static function fromReflectionParameter(ReflectionParameter $ref): self
+    public static function fromReflectionParameter(ReflectionParameter|\PHPStan\BetterReflection\Reflection\ReflectionParameter $ref): self
     {
         $param = new self($ref->getName());
         $param->setReference($ref->isPassedByReference());
         $param->addType($ref->getType());
-        $param->addTypes($ref->getDocBlockTypes());
+        $param->addTypes(ReflectionHelper::getDocBlockTypes($ref));
         if (!$ref->isVariadic() && ($ref->isOptional() || $ref->isDefaultValueAvailable())) {
             $param->setValue(new Value($ref->getDefaultValue(), $ref->isDefaultValueConstant()));
         }
@@ -89,7 +92,7 @@ class Parameter implements ValueAware, Element, TypeAware
     public static function fromString(string $from): self
     {
         [$className, $methodName, $parameterName] = explode('::', $from);
-        $ref = ReflectionParameter::createFromClassNameAndMethod($className, $methodName, $parameterName);
+        $ref = ReflectionHelper::createParameterFromClassNameAndMethod($className, $methodName, $parameterName);
 
         return self::fromReflectionParameter($ref);
     }
@@ -128,7 +131,7 @@ class Parameter implements ValueAware, Element, TypeAware
 
     public function setPromoted(): self
     {
-        if ($this->getParent() && $this->getParent()->getName() !== Method::CONSTRUCTOR) {
+        if ($this->getParent()?->getName() !== Method::CONSTRUCTOR) {
             throw new \RuntimeException('Promotion is only allowed for constructor parameters');
         }
 

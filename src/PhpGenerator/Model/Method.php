@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace Sidux\PhpGenerator\Model;
 
-use Roave\BetterReflection\Reflection\ReflectionFunction;
-use Roave\BetterReflection\Reflection\ReflectionMethod;
+use ReflectionFunction;
+use ReflectionMethod;
 use Sidux\PhpGenerator\Helper;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Helper\StringHelper;
 use Sidux\PhpGenerator\Model\Contract\Element;
 use Sidux\PhpGenerator\Model\Contract\Member;
 use Sidux\PhpGenerator\Model\Contract\TypeAware;
+use PHPStan\BetterReflection\Reflection\ReflectionFunction as BetterReflectionFunction;
 
 /**
- * @method static self from(ReflectionMethod|ReflectionFunction|string|array $from)
+ * @method static self from(ReflectionMethod|ReflectionFunction|\ReflectionFunction|string|array $from)
  */
 final class Method extends Member implements Element, TypeAware
 {
@@ -45,6 +47,8 @@ final class Method extends Member implements Element, TypeAware
      */
     private string $defaultParameterVisibility = Parameter::DEFAULT_VISIBILITY;
 
+    private bool $format = false;
+
     public function __toString(): string
     {
         $this->validate();
@@ -59,9 +63,9 @@ final class Method extends Member implements Element, TypeAware
         $output .= $this->isReference() ? '&' : null;
         $output .= $this->getName();
         $output .= '(';
-        $output .= $this->hasMoreThanTwoParameters() ? "\n" : null;
-        $output .= $this->hasMoreThanTwoParameters() ? StringHelper::indent(implode(",\n", $this->getParameters())) : implode(', ', $this->getParameters());
-        $output .= $this->hasMoreThanTwoParameters() ? "\n" : null;
+        $output .= $this->isFormatted() ? "\n" : null;
+        $output .= $this->isFormatted() ? StringHelper::indent(implode(",\n", $this->getParameters())) : implode(', ', $this->getParameters());
+        $output .= $this->isFormatted() ? "\n" : null;
         $output .= ')';
         $output .= $this->getTypeHint() ? ': ' . $this->getTypeHint() : null;
         $output .= $this->hasBody() ? "\n{\n" : ";\n";
@@ -81,30 +85,33 @@ final class Method extends Member implements Element, TypeAware
         return new self($name);
     }
 
+    /**
+     * @throws \Exception
+     */
     public static function fromArray(array $from): self
     {
         [$className, $methodName] = $from;
         if (\is_object($className)) {
             $className = $className::class;
         }
-        $ref = ReflectionMethod::createFromName($className, $methodName);
+        $ref = ReflectionHelper::createReflectionMethodFromName($className, $methodName);
 
         return self::fromReflectionMethod($ref);
     }
 
-    public static function fromReflectionFunction(ReflectionFunction $ref): self
+    public static function fromReflectionFunction(ReflectionFunction|BetterReflectionFunction $ref): self
     {
         $method = new self($ref->getName());
         /** @var  array<string, Parameter> $parameters */
         $parameters = array_map(Parameter::class . '::from', $ref->getParameters());
         $method->setParameters($parameters);
         $method->setVariadic($ref->isVariadic());
-        $method->setBody($ref->getBodyCode());
+        $method->setBody(ReflectionHelper::getBodyCode($ref));
         $method->setReference($ref->returnsReference());
         $method->setComment($ref->getDocComment());
         if ($ref->hasReturnType()) {
             $method->addType($ref->getReturnType());
-            $method->addTypes($ref->getDocBlockReturnTypes());
+            $method->addTypes(ReflectionHelper::getDocBlockReturnTypes($ref));
         }
 
         return $method;
@@ -132,31 +139,34 @@ final class Method extends Member implements Element, TypeAware
 
         $method->setFinal($ref->isFinal());
         $method->setAbstract($ref->isAbstract() && !$isInterface);
-        $method->setBody($ref->getBodyCode());
+        $method->setBody(ReflectionHelper::getBodyCode($ref, $isInterface));
         $method->setReference($ref->returnsReference());
-        $method->setComment($ref->getDocComment());
+        $method->setComment($ref->getDocComment() ?: null);
         if ($ref->hasReturnType()) {
             $method->addType($ref->getReturnType());
-            $method->addTypes($ref->getDocBlockReturnTypes());
+            $method->addTypes(ReflectionHelper::getDocBlockReturnTypes($ref));
         }
 
         return $method;
     }
 
+    /**
+     * @throws \Exception
+     */
     public static function fromString(string $from): self
     {
         $parts = explode('::', $from);
 
         if (2 === \count($parts)) {
             [$className, $methodName] = $parts;
-            $ref = ReflectionMethod::createFromName($className, $methodName);
+            $ref = ReflectionHelper::createReflectionMethodFromName($className, $methodName);
 
             return self::fromReflectionMethod($ref);
         }
 
         if (1 === \count($parts)) {
             [$methodName] = $parts;
-            $ref = ReflectionFunction::createFromName($methodName);
+            $ref = ReflectionHelper::createReflectionFunctionFromName($methodName);
 
             return self::fromReflectionFunction($ref);
         }
@@ -215,6 +225,8 @@ final class Method extends Member implements Element, TypeAware
     }
 
     /**
+     * @deprecated types are not resolved properly when using setParameters - this needs to be fixed in a later release. Use addParameter() instead.
+     *
      * @param Parameter[] $parameters
      */
     public function setParameters(array $parameters): self
@@ -236,6 +248,20 @@ final class Method extends Member implements Element, TypeAware
         $this->variadic = $variadic;
 
         return $this;
+    }
+
+    public function setFormat(bool $format = true): self
+    {
+        if ($this->hasMoreThanTwoParameters()) {
+            $this->format = $format;
+        }
+
+        return $this;
+    }
+
+    public function isFormatted(): bool
+    {
+        return $this->format;
     }
 
     public function addBody(string $code): self

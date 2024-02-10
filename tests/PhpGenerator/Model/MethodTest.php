@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Sidux\PhpGenerator\Model;
 
 use PHPUnit\Framework\TestCase;
-use Roave\BetterReflection\Reflection\ReflectionFunction;
-use Roave\BetterReflection\Reflection\ReflectionMethod;
 use Sidux\PhpGenerator\Assert;
+use Sidux\PhpGenerator\Helper\ReflectionHelper;
 use Sidux\PhpGenerator\Helper\StubHelper;
 use Sidux\PhpGenerator\Stub\D;
 use Sidux\PhpGenerator\Stub\InterfaceStub1;
@@ -19,22 +18,22 @@ final class MethodTest extends TestCase
 
     /**
      * @test
-     * @throws \ReflectionException
      */
     public function from(): void
     {
-        $res = Method::from(ReflectionMethod::createFromName(self::class, 'from'));
+        $res = Method::from(ReflectionHelper::createReflectionMethodFromName(self::class, 'from'));
         Assert::assertInstanceOf(Method::class, $res);
         Assert::assertSame('from', $res->getName());
 
-        $res = Method::from(ReflectionFunction::createFromName('trim'));
+        $res = Method::from(ReflectionHelper::createReflectionFunctionFromName('trim'));
+
         Assert::assertInstanceOf(Method::class, $res);
         Assert::assertSame('trim', $res->getName());
 
         Assert::assertException(
             static function () {
                 Method::from(
-                    ReflectionFunction::createFromClosure(
+                    ReflectionHelper::createFunctionFromClosure(
                         static function () {
                         }
                     )
@@ -262,6 +261,5 @@ final class MethodTest extends TestCase
         $content  = StubHelper::load('functionStub1');
         $function = Method::from('functionStub1');
         Assert::assertSame($content, (string)$function);
-
     }
 }
